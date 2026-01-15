@@ -24,7 +24,19 @@ Tested with Google Pixel 10 Pro running Android 16.
 
 ADB WiFi mode resets on every reboot. To restore:
 
-1. Connect phone via USB
+**Option A: Wireless Debugging (recommended)**
+
+1. Connect Xreal glasses to phone
+2. On phone: Settings → Developer options → Wireless debugging → get IP:PORT
+3. Connect and set density:
+   ```bash
+   ./setup.sh connect IP:PORT
+   ./setup.sh density
+   ```
+
+**Option B: USB Setup**
+
+1. Connect phone via USB (glasses disconnected)
 2. Setup ADB over WiFi:
    ```bash
    ./setup.sh usb
@@ -38,15 +50,18 @@ ADB WiFi mode resets on every reboot. To restore:
 ## Usage
 
 ```bash
-./setup.sh              # Auto-detect and configure
-./setup.sh usb          # Setup ADB WiFi (phone connected via USB)
-./setup.sh density      # Set density only (already connected via WiFi)
-./setup.sh init         # One-time initialization of persistent settings
+./setup.sh                    # Auto-detect and configure
+./setup.sh connect IP:PORT    # Connect via wireless debugging
+./setup.sh usb                # Setup ADB WiFi (phone connected via USB)
+./setup.sh density            # Set density only (already connected)
+./setup.sh init               # One-time initialization of persistent settings
 ```
 
 ## Configuration
 
-Edit `setup.sh` to change the display density (default: 160):
+Edit `setup.sh` to change settings:
+
+### Display Density (default: 160)
 
 | Density | Description              |
 | ------- | ------------------------ |
@@ -54,6 +69,14 @@ Edit `setup.sh` to change the display density (default: 160):
 | `160`   | Balanced (recommended)   |
 | `200`   | Larger UI, less content  |
 | `240`   | Very large UI            |
+
+### Pointer Speed (default: 7)
+
+| Value | Description |
+| ----- | ----------- |
+| `-7`  | Slowest     |
+| `0`   | Default     |
+| `7`   | Fastest     |
 
 ## How It Works
 
@@ -67,6 +90,7 @@ The `init` command applies these one-time settings:
 - `development_enable_freeform_windows_on_secondary_displays=1`
 - `development_enable_desktop_windowing=1`
 - `allow_desktop_on_external_displays=1`
+- `pointer_speed=7` - Sets mouse pointer speed to maximum
 
 ### Runtime Settings (reset on reboot/reconnect)
 

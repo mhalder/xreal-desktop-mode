@@ -4,18 +4,21 @@
 # For Google Pixel 10 Pro
 #
 # Usage:
-#   ./xreal-setup.sh              # Auto-detect and configure
-#   ./xreal-setup.sh usb          # Setup ADB WiFi (phone connected via USB)
-#   ./xreal-setup.sh density      # Set density only (already connected via WiFi)
-#   ./xreal-setup.sh init         # One-time initialization of persistent settings
+#   ./setup.sh                    # Auto-detect and configure
+#   ./setup.sh usb                # Setup ADB WiFi (phone connected via USB)
+#   ./setup.sh connect IP:PORT    # Connect via wireless debugging (e.g., 192.168.1.6:39963)
+#   ./setup.sh density            # Set density only (already connected via WiFi)
+#   ./setup.sh init               # One-time initialization of persistent settings
 #
 
 set -e
 
 # Configuration
 WIFI_PORT=5555
-DENSITY=160 # Adjust this value if needed (120=small, 160=balanced, 200=large)
+DENSITY=160     # Adjust this value if needed (120=small, 160=balanced, 200=large)
+POINTER_SPEED=7 # Range: -7 (slowest) to 7 (fastest), 0 = default 50%
 PHONE_IP=""
+SAVED_ADDR_FILE="/tmp/xreal_phone_addr"
 
 # Colors for output
 RED='\033[0;31m'
@@ -144,17 +147,47 @@ init_persistent_settings() {
   adb -s "$device" shell settings put global development_enable_desktop_windowing 1
   adb -s "$device" shell settings put global allow_desktop_on_external_displays 1
 
+  # Set pointer speed (persists across reboots)
+  adb -s "$device" shell settings put system pointer_speed $POINTER_SPEED
+  log_info "Pointer speed set to $POINTER_SPEED (max speed)"
+
   log_info "Desktop mode settings applied!"
   log_info "These settings persist across reboots."
 }
 
 # Reconnect to known WiFi device
 reconnect_wifi() {
+  # First check if already connected
+  if get_device >/dev/null 2>&1; then
+    return 0
+  fi
+
+  # Try saved address (ip:port from wireless debugging)
+  if [ -f "$SAVED_ADDR_FILE" ]; then
+    local saved_addr=$(cat "$SAVED_ADDR_FILE")
+    log_info "Reconnecting to $saved_addr..."
+    adb connect "$saved_addr" 2>/dev/null || true
+    sleep 1
+    if get_device >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+
+  # Fall back to old IP file with default port
   if [ -f /tmp/xreal_phone_ip ]; then
     PHONE_IP=$(cat /tmp/xreal_phone_ip)
-    log_info "Reconnecting to $PHONE_IP:$WIFI_PORT..."
+    log_info "Trying $PHONE_IP:$WIFI_PORT..."
     adb connect "$PHONE_IP:$WIFI_PORT" 2>/dev/null || true
     sleep 1
+  fi
+}
+
+# Save current connection address for reconnection
+save_connection() {
+  local device=$(get_device)
+  if [[ "$device" == *":"* ]]; then
+    echo "$device" >"$SAVED_ADDR_FILE"
+    log_info "Saved connection: $device"
   fi
 }
 
@@ -166,14 +199,25 @@ main() {
   usb)
     setup_wifi_adb
     ;;
+  connect)
+    if [ -z "$2" ]; then
+      log_error "Usage: $0 connect IP:PORT"
+      log_info "Get the address from: Settings → Developer options → Wireless debugging"
+      exit 1
+    fi
+    log_info "Connecting to $2..."
+    adb connect "$2"
+    save_connection
+    ;;
   density)
     reconnect_wifi
     device=$(get_device)
     if [ -z "$device" ]; then
-      log_error "No device connected. Run './xreal-setup.sh usb' first."
+      log_error "No device connected. Run './setup.sh connect IP:PORT' first."
       exit 1
     fi
     set_xreal_density "$device"
+    save_connection
     ;;
   init)
     device=$(get_device)
@@ -193,9 +237,10 @@ main() {
       log_warn "No device connected."
       echo ""
       echo "Usage:"
-      echo "  $0 usb      - Setup ADB WiFi (connect phone via USB first)"
-      echo "  $0 density  - Set Xreal display density"
-      echo "  $0 init     - One-time setup of persistent settings"
+      echo "  $0 connect IP:PORT  - Connect via wireless debugging"
+      echo "  $0 usb              - Setup ADB WiFi (connect phone via USB first)"
+      echo "  $0 density          - Set Xreal display density"
+      echo "  $0 init             - One-time setup of persistent settings"
       exit 1
     fi
 
@@ -212,13 +257,14 @@ main() {
     fi
     ;;
   *)
-    echo "Usage: $0 [usb|density|init|auto]"
+    echo "Usage: $0 [connect|usb|density|init|auto]"
     echo ""
     echo "Commands:"
-    echo "  usb     - Setup ADB over WiFi (phone must be connected via USB)"
-    echo "  density - Set density on Xreal display (requires WiFi ADB)"
-    echo "  init    - One-time setup of persistent settings"
-    echo "  auto    - Auto-detect and configure (default)"
+    echo "  connect IP:PORT  - Connect via wireless debugging"
+    echo "  usb              - Setup ADB over WiFi (phone must be connected via USB)"
+    echo "  density          - Set density on Xreal display"
+    echo "  init             - One-time setup of persistent settings"
+    echo "  auto             - Auto-detect and configure (default)"
     exit 1
     ;;
   esac
